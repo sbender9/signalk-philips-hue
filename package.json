@@ -1,7 +1,7 @@
 {
   "name": "signalk-philips-hue",
   "version": "1.0.0",
-  "description": "Signal K Node Server Plugin To Operate Hue Lights and Accessories",
+  "description": "Signal K Node Server Plugin To Operate Hue Lights",
   "main": "index.js",
   "scripts": {
     "test": "$NODE $npm_package_main",

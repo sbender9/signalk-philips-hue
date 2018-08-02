@@ -23,7 +23,10 @@ const base = 'electrical.switches.hue'
 module.exports = function(app) {
   var plugin = {}
   var statusMessage = "Not Started"
-  var registeredForPut = {}
+  var registeredForPut = {
+    'groups': {},
+    'lights': {}
+  }
   
   plugin.start = function(props) {
     if ( _.isUndefined(props.address) ) {
@@ -85,7 +88,7 @@ module.exports = function(app) {
             if ( res.success ) {
               props.username = res.success.username
               app.savePluginOptions(props, () => {})
-              loadinfo(props, ip)
+              load(props, ip)
             } else {
               statusMessage = res.error.description
               app.error(statusMessage)
@@ -99,7 +102,7 @@ module.exports = function(app) {
         }
       })
     } else {
-      loadInfo(props, ip)
+      load(props, ip)
     }
   }
 
@@ -120,7 +123,8 @@ module.exports = function(app) {
       new_value = new_value ? true : false
     }
 
-    let requestPath = `/lights/${data.id}/state`
+    let action = data.hueType === 'groups' ? 'action' : 'state'
+    let requestPath = `/${data.hueType}/${data.id}/${action}`
     let url = `http://${data.ip}/api/${data.props.username}${requestPath}`
     let body = {
       [type]: new_value
@@ -178,53 +182,66 @@ module.exports = function(app) {
     return { state: 'PENDING' }
   }
 
-  function loadInfo(props, ip) {
+  function load(props, ip) {
+    loadInfo(props, ip, 'lights')
+    loadInfo(props, ip, 'groups')
+  }
+
+  function loadInfo(props, ip, hueType) {
     request({
-        url: `http://${ip}/api/${props.username}/lights`,
+        url: `http://${ip}/api/${props.username}/${hueType}`,
         method: 'GET',
         json: true,
       }, (error, response, body) => {
         if (!error && response.statusCode === 200) {
-          app.debug('lights body: %j', body)
+          app.debug('%s body: %j', hueType, body)
 
           _.keys(body).forEach(key => {
             let light = body[key]
-            let path = `${base}.${camelCase(light.name)}`
+            let displayName = light.name
+            let path = `${base}.${hueType}.${camelCase(displayName)}`
+
+            if ( hueType === 'groups' ) {
+              light = light.action
+            } else {
+              light = light.state
+            }
 
             var values = [
               {
                 path: `${path}.state`,
-                value: light.state.on
+                value: light.on
               },
               {
                 path: `${path}.hue`,
-                value: light.state.hue / 65535
+                value: light.hue / 65535
               },
               {
                 path: `${path}.dimmingLevel`,
-                value: light.state.bri / 254.0
+                value: light.bri / 254.0
               },
               {
                 path: `${path}.saturation`,
-                value: light.state.sat / 254.0
+                value: light.sat / 254.0
               },
               {
                 path: `${path}.meta`,
                 value: {
                   type: 'dimmer',
-                  displayName: light.name
+                  displayName: displayName
                 }
               }
             ]
 
-            if ( !registeredForPut[key] && app.registerActionHandler ) {
+            if ( !registeredForPut[hueType][key] && app.registerActionHandler ) {
               app.registerActionHandler('vessels.self',
                                         `${path}.state`,
                                         getActionHandler({
                                           ip: ip,
                                           props: props,
                                           id: key,
-                                          type: 'state'
+                                          type: 'state',
+                                          hueType: hueType
                                         }))
               app.registerActionHandler('vessels.self',
                                         `${path}.dimmingLevel`,
@@ -232,9 +249,11 @@ module.exports = function(app) {
                                           ip: ip,
                                           props: props,
                                           id: key,
-                                          type: 'dimmingLevel'
+                                          type: 'dimmingLevel',
+                                          hueType: hueType
                                         }))
-              registeredForPut[key] = true
+              
+              registeredForPut[hueType][key] = true
             }
             
             app.handleMessage(plugin.id, {
@@ -250,6 +269,8 @@ module.exports = function(app) {
         }
       })
   }
+
+
 
   /*
   function send_to_iftt(eventName, state, message, path)
@@ -284,7 +305,7 @@ module.exports = function(app) {
   
   plugin.id = "signalk-philips-hue"
   plugin.name = "Philips Hue"
-  plugin.description = "Signal K Node Server Plugin To Operate Hue Lights and Accessories"
+  plugin.description = "Signal K Node Server Plugin To Operate Hue Lights"
 
   plugin.schema = {
     title: plugin.name,
