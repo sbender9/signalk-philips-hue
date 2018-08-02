@@ -19,6 +19,11 @@ const request = require("request")
 const camelCase = require('camelcase')
 
 const base = 'electrical.switches.hue'
+const colorModeMap = {
+  hs: 'hsb',
+  ct: 'temperature',
+  xy: 'cie'
+}
 
 module.exports = function(app) {
   var plugin = {}
@@ -204,38 +209,64 @@ module.exports = function(app) {
             let light = body[key]
             let displayName = light.name
             let path = `${base}.${hueType}.${camelCase(displayName)}`
-
+            let state
+            
             if ( hueType === 'groups' ) {
-              light = light.action
+              state = light.action
             } else {
-              light = light.state
+              state = light.state
             }
 
             var values = [
               {
                 path: `${path}.state`,
-                value: light.on
-              },
-              {
-                path: `${path}.hue`,
-                value: light.hue / 65535
+                value: state.on
               },
               {
                 path: `${path}.dimmingLevel`,
-                value: light.bri / 254.0
-              },
-              {
-                path: `${path}.saturation`,
-                value: light.sat / 254.0
+                value: state.bri / 255.0
               },
               {
                 path: `${path}.meta`,
                 value: {
                   type: 'dimmer',
-                  displayName: displayName
+                  displayName: displayName,
+                  hueModel: light.modelid
                 }
               }
             ]
+
+            if ( state.colormode ) {
+              values.push({
+                path: `${path}.colorMode`,
+                value: colorModeMap[state.colormode]
+              })
+
+              if ( state.hue && state.sat ) {
+                values.push({
+                  path: `${path}.hue`,
+                  value: state.hue / 182.04 / 360.0
+                })
+                values.push({
+                  path: `${path}.saturation`,
+                  value: state.sat / 255.0
+                })
+              }
+
+              if ( state.ct ) {
+                values.push({
+                  path: `${path}.temperature`,
+                  value: 1000000.0/state.ct
+                })
+              }
+
+              if ( state.xy ) {
+                values.push({
+                  path: `${path}.cie`,
+                  value: { x: state.xy[0], y: state.xy[1] }
+                })
+              }
+            }
 
             if ( !registeredForPut[hueType][key] && app.registerActionHandler ) {
               app.registerActionHandler('vessels.self',
