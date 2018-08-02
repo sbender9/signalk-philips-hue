@@ -1,0 +1,28 @@
+{
+  "name": "signalk-philips-hue",
+  "version": "1.0.0",
+  "description": "Signal K Node Server Plugin To Operate Hue Lights and Accessories",
+  "main": "index.js",
+  "scripts": {
+    "test": "$NODE $npm_package_main",
+    "changelog": "github-changes -o sbender9 -r signalk-ifttt-notifications -a --only-pulls --use-commit-body --data=pulls  --tag-name=v$npm_package_version",
+    "release": "git tag -d v$npm_package_version; (npm run changelog && git add CHANGELOG.md && git commit -m 'chore: update changelog'); git tag v$npm_package_version && git push --tags && git push"
+  },
+  "keywords": [
+    "signalk-node-server-plugin"
+  ],
+  "author": "scott@scottbender.net",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "camelcase": "^5.0.0",
+    "lodash": "^4.17.10",
+    "request": "^2.87.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sbender9/signalk-philips-hue"
+  },
+  "devDependencies": {
+    "github-changes": "^1.1.2"
+  }
+}
