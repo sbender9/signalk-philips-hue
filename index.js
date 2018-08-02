@@ -27,6 +27,7 @@ module.exports = function(app) {
     'groups': {},
     'lights': {}
   }
+  var timer
   
   plugin.start = function(props) {
     if ( _.isUndefined(props.address) ) {
@@ -63,8 +64,8 @@ module.exports = function(app) {
 
   function printRequestError(error, response) {
     app.error("error: " + error)
-    app.error("response.statusCode: " + response.statusCode)
-    app.error("response.statusText: " + response.statusText)
+    //app.error("response.statusCode: " + response.statusCode)
+    //app.error("response.statusText: " + response.statusText)
   }
 
   function loadBridge(props, ip) {
@@ -103,6 +104,9 @@ module.exports = function(app) {
       })
     } else {
       load(props, ip)
+      timer = setInterval(() => {
+        load(props, ip)
+      }, (props.refreshRate || 5)  * 1000)
     }
   }
 
