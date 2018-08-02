@@ -1,7 +1,7 @@
 # signalk-philips-hue
 Signal K Node Server Plugin To Operate Hue Lights
 
-This plugin can control Hue lights on the local network. 
+This plugin can control Hue lights on the local network. It currently supports controlling brightness and state of individual lights or groups of lights.
 
 If your boat does not have internet access, you'll need to enter the ip address of your Hue Bridge in the plugin configuration.
 
