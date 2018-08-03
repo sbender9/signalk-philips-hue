@@ -28,13 +28,15 @@ const colorModeMap = {
 module.exports = function(app) {
   var plugin = {}
   var statusMessage = "Not Started"
-  var registeredForPut = {
-    'groups': {},
-    'lights': {}
-  }
-  var timer
+  var registeredForPut
+  var onStop = []
   
   plugin.start = function(props) {
+    registeredForPut = {
+      'groups': {},
+      'lights': {}
+    }
+    statusMessage = 'Starting...'
     if ( _.isUndefined(props.address) ) {
       request({
         url: 'https://discovery.meethue.com/',
@@ -66,15 +68,18 @@ module.exports = function(app) {
   }
 
   plugin.stop = function() {
+    onStop.forEach(f => f())
   }
 
   function printRequestError(error, response) {
+    statusMessage = '' + error
     app.error("error: " + error)
     //app.error("response.statusCode: " + response.statusCode)
     //app.error("response.statusText: " + response.statusText)
   }
 
   function loadBridge(props, ip) {
+    statusMessage = `Connecting to ${ip}`
     if ( _.isUndefined(props.username) ) {
       request({
         url: `http://${ip}/api`,
@@ -93,9 +98,10 @@ module.exports = function(app) {
           if ( _.isArray(body) && body.length > 0 && _.isObject(body[0]) && (body[0].error || body[0].success) ) {
             let res = body[0]
             if ( res.success ) {
+              statusMessage = 'Obtained username'
               props.username = res.success.username
               app.savePluginOptions(props, () => {})
-              load(props, ip)
+              startLoading(props, ip)
             } else {
               statusMessage = res.error.description
               app.error(statusMessage)
@@ -109,11 +115,16 @@ module.exports = function(app) {
         }
       })
     } else {
-      load(props, ip)
-      timer = setInterval(() => {
-        load(props, ip)
-      }, (props.refreshRate || 5)  * 1000)
+      startLoading(props, ip)
     }
+  }
+
+  function startLoading(props, ip) {
+    load(props, ip)
+    let timer = setInterval(() => {
+      load(props, ip)
+    }, (props.refreshRate || 5)  * 1000)
+    onStop.push(() => clearInterval(timer))
   }
 
   function getActionHandler(data) {
@@ -204,6 +215,7 @@ module.exports = function(app) {
         json: true,
       }, (error, response, body) => {
         if (!error && response.statusCode === 200) {
+          statusMessage = `Connected to ${ip}`
           app.debug('%s body: %j', hueType, body)
 
           _.keys(body).forEach(key => {
