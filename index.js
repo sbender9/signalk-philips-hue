@@ -56,6 +56,7 @@ module.exports = function(app) {
         }
       })
     } else {
+      app.debug(`using configured ip address ${props.address}`)
       loadBridge(props, props.address)
     }
   };
@@ -100,7 +101,7 @@ module.exports = function(app) {
               app.error(statusMessage)
             }
           } else {
-            statusMessage = `Invalid Response ${JSON.stringify(body)}`
+            statusMessage = `Invalid Discovery Response  ${JSON.stringify(body)}`
             app.error(statusMessage)
           }
         } else {
@@ -210,17 +211,20 @@ module.exports = function(app) {
             let displayName = light.name
             let path = `${base}.${hueType}.${camelCase(displayName)}`
             let state
+            let on
             
             if ( hueType === 'groups' ) {
               state = light.action
+              on = light.state.any_on
             } else {
               state = light.state
+              on = light.state.on
             }
 
             var values = [
               {
                 path: `${path}.state`,
-                value: state.on
+                value: on
               },
               {
                 path: `${path}.dimmingLevel`,
