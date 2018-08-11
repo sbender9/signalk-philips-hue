@@ -178,10 +178,11 @@ module.exports = function(app) {
                   }]
                 }]
               })
+              cb({state: 'SUCCESS'})
             } else {
               cb({
                 state: 'FAILURE',
-              message: body[0].error.description
+                message: body[0].error.description
               })
             }
           } else {
