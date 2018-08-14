@@ -27,16 +27,21 @@ const colorModeMap = {
 
 module.exports = function(app) {
   var plugin = {}
-  var statusMessage = "Not Started"
   var registeredForPut
   var onStop = []
+  var statusMessage
+
+  const setProviderStatus = app.setProviderStatus
+        ? (msg, type) => {
+          app.setProviderStatus(msg, type)
+          statusMessage = `${type}: ${msg}`
+        } : (msg, type) => { statusMessage = `${type}: ${msg}` }
   
   plugin.start = function(props) {
     registeredForPut = {
       'groups': {},
       'lights': {}
     }
-    statusMessage = 'Starting...'
     if ( _.isUndefined(props.address) ) {
       request({
         url: 'https://discovery.meethue.com/',
@@ -50,8 +55,9 @@ module.exports = function(app) {
             app.debug(`found bridge at ${ip}`)
             loadBridge(props, ip)
           } else {
-            statusMessage = 'No bridges found'
-            app.error(statusMessage)
+            const msg = 'No bridges found'
+            setProviderStatus(msg, 'error')
+            app.error(msg)
           }
         } else {
           printRequestError(error, response)
@@ -72,14 +78,14 @@ module.exports = function(app) {
   }
 
   function printRequestError(error, response) {
-    statusMessage = '' + error
-    app.error("error: " + error)
+    setProviderStatus(error.message, 'error')
+    app.error("error: " + error.message)
     //app.error("response.statusCode: " + response.statusCode)
     //app.error("response.statusText: " + response.statusText)
   }
 
   function loadBridge(props, ip) {
-    statusMessage = `Connecting to ${ip}`
+    setProviderStatus(`Connecting to ${ip}`, 'normal')
     if ( _.isUndefined(props.username) ) {
       request({
         url: `http://${ip}/api`,
@@ -98,17 +104,18 @@ module.exports = function(app) {
           if ( _.isArray(body) && body.length > 0 && _.isObject(body[0]) && (body[0].error || body[0].success) ) {
             let res = body[0]
             if ( res.success ) {
-              statusMessage = 'Obtained username'
+              setProviderStatus('Obtained username', 'normal')
               props.username = res.success.username
               app.savePluginOptions(props, () => {})
               startLoading(props, ip)
             } else {
-              statusMessage = res.error.description
-              app.error(statusMessage)
+              setProviderStatus(res.error.description, 'error')
+              app.error(res.error.description)
             }
           } else {
-            statusMessage = `Invalid Discovery Response  ${JSON.stringify(body)}`
-            app.error(statusMessage)
+            const msg = `Invalid Discovery Response  ${JSON.stringify(body)}`
+            setProviderStatus(msg, 'error')
+            app.error(msg)
           }
         } else {
           printRequestError(error, response)
@@ -216,8 +223,8 @@ module.exports = function(app) {
         json: true,
       }, (error, response, body) => {
         if (!error && response.statusCode === 200) {
-          statusMessage = `Connected to ${ip}`
-          app.debug('%s body: %j', hueType, body)
+          setProviderStatus(`Connected to ${ip}`, 'normal')
+          //app.debug('%s body: %j', hueType, body)
 
           _.keys(body).forEach(key => {
             let light = body[key]
@@ -248,7 +255,8 @@ module.exports = function(app) {
                 value: {
                   type: 'dimmer',
                   displayName: displayName,
-                  hueModel: light.modelid
+                  hueModel: light.modelid,
+                  canDimWhenOff: true
                 }
               }
             ]
