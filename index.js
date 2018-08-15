@@ -32,10 +32,16 @@ module.exports = function(app) {
   var statusMessage
 
   const setProviderStatus = app.setProviderStatus
-        ? (msg, type) => {
-          app.setProviderStatus(msg, type)
-          statusMessage = `${type}: ${msg}`
-        } : (msg, type) => { statusMessage = `${type}: ${msg}` }
+        ? (msg) => {
+          app.setProviderStatus(msg)
+          statusMessage = msg
+        } : (msg) => { statusMessage = msg }
+
+  const setProviderError = app.setProviderError
+        ? (msg) => {
+          app.setProviderError(msg)
+          statusMessage = `error: ${msg}`
+        } : (msg, type) => { statusMessage = `error: ${msg}` }
   
   plugin.start = function(props) {
     registeredForPut = {
@@ -56,7 +62,7 @@ module.exports = function(app) {
             loadBridge(props, ip)
           } else {
             const msg = 'No bridges found'
-            setProviderStatus(msg, 'error')
+            setProviderError(msg)
             app.error(msg)
           }
         } else {
@@ -78,14 +84,14 @@ module.exports = function(app) {
   }
 
   function printRequestError(error, response) {
-    setProviderStatus(error.message, 'error')
+    setProviderError(error.message)
     app.error("error: " + error.message)
     //app.error("response.statusCode: " + response.statusCode)
     //app.error("response.statusText: " + response.statusText)
   }
 
   function loadBridge(props, ip) {
-    setProviderStatus(`Connecting to ${ip}`, 'normal')
+    setProviderStatus(`Connecting to ${ip}`)
     if ( _.isUndefined(props.username) ) {
       request({
         url: `http://${ip}/api`,
@@ -104,17 +110,17 @@ module.exports = function(app) {
           if ( _.isArray(body) && body.length > 0 && _.isObject(body[0]) && (body[0].error || body[0].success) ) {
             let res = body[0]
             if ( res.success ) {
-              setProviderStatus('Obtained username', 'normal')
+              setProviderStatus('Obtained username')
               props.username = res.success.username
               app.savePluginOptions(props, () => {})
               startLoading(props, ip)
             } else {
-              setProviderStatus(res.error.description, 'error')
+              setProviderError(res.error.description)
               app.error(res.error.description)
             }
           } else {
             const msg = `Invalid Discovery Response  ${JSON.stringify(body)}`
-            setProviderStatus(msg, 'error')
+            setProviderError(msg)
             app.error(msg)
           }
         } else {
@@ -223,7 +229,7 @@ module.exports = function(app) {
         json: true,
       }, (error, response, body) => {
         if (!error && response.statusCode === 200) {
-          setProviderStatus(`Connected to ${ip}`, 'normal')
+          setProviderStatus(`Connected to ${ip}`)
           //app.debug('%s body: %j', hueType, body)
 
           _.keys(body).forEach(key => {
