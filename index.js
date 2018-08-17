@@ -262,7 +262,7 @@ module.exports = function(app) {
                   type: 'dimmer',
                   displayName: displayName,
                   hueModel: light.modelid,
-                  canDimWhenOff: true
+                  canDimWhenOff: false
                 }
               }
             ]
