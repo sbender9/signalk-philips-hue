@@ -230,7 +230,7 @@ module.exports = function(app) {
       }, (error, response, body) => {
         if (!error && response.statusCode === 200) {
           setProviderStatus(`Connected to ${ip}`)
-          //app.debug('%s body: %j', hueType, body)
+          app.debug('%s body: %j', hueType, body)
 
           _.keys(body).forEach(key => {
             let light = body[key]
