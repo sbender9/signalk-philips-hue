@@ -230,9 +230,6 @@ module.exports = function(app) {
         printRequestError(error)
         return
       }
-      
-      //app.debug('%s body: %j', hueType, body)
-
       setProviderStatus(`Connected to ${ip}`)
       _.keys(body).forEach(key => {
         if ( body[key].error ) {
