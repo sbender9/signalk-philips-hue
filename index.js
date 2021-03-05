@@ -30,16 +30,17 @@ module.exports = function(app) {
   var registeredForPut
   var onStop = []
   var statusMessage
+  var sentMeta = {}
 
   const setProviderStatus = app.setProviderStatus
         ? (msg) => {
-          app.setProviderStatus(msg)
+          app.setPluginStatus(msg)
           statusMessage = msg
         } : (msg) => { statusMessage = msg }
 
   const setProviderError = app.setProviderError
         ? (msg) => {
-          app.setProviderError(msg)
+          app.setPluginError(msg)
           statusMessage = `error: ${msg}`
         } : (msg, type) => { statusMessage = `error: ${msg}` }
   
@@ -149,14 +150,11 @@ module.exports = function(app) {
   function actionHandler(context, path, value, data, cb) {
     let new_value = value
     let type = data.type
-    if ( data.type === 'dimmingLevel' ) {
-      new_value = Math.round(value * 254)
-      type = 'bri'
-    } else {
-      type = 'on'
-      new_value = new_value ? true : false
+    
+    if ( data.converter ) {
+      new_value = data.converter(new_value)
     }
-
+    
     let action = data.hueType === 'groups' ? 'action' : 'state'
     let requestPath = `/${data.hueType}/${data.id}/${action}`
     let url = `http://${data.ip}/api/${data.props.username}${requestPath}`
@@ -224,116 +222,207 @@ module.exports = function(app) {
 
   function loadInfo(props, ip, hueType) {
     request({
-        url: `http://${ip}/api/${props.username}/${hueType}`,
-        method: 'GET',
-        json: true,
-      }, (error, response, body) => {
-        if (!error && response.statusCode === 200) {
-          setProviderStatus(`Connected to ${ip}`)
-          //app.debug('%s body: %j', hueType, body)
+      url: `http://${ip}/api/${props.username}/${hueType}`,
+      method: 'GET',
+      json: true,
+    }, (error, response, body) => {
+      if (error || response.statusCode !== 200) {
+        printRequestError(error)
+        return
+      }
+      
+      //app.debug('%s body: %j', hueType, body)
 
-          _.keys(body).forEach(key => {
-            let light = body[key]
-            let displayName = light.name
-            let path = `${base}.${hueType}.${camelCase(displayName)}`
-            let state
-            let on
-            
-            if ( hueType === 'groups' ) {
-              state = light.action
-              on = light.state.any_on
-            } else {
-              state = light.state
-              on = light.state.on
+      setProviderStatus(`Connected to ${ip}`)
+      _.keys(body).forEach(key => {
+        if ( body[key].error ) {
+          setProviderError(body[key].error.description)
+          app.error(JSON.stringify(body[key].error))
+          return
+        }
+
+        let light = body[key]
+        let displayName = light.name
+        let path = `${base}.${hueType}.${camelCase(displayName)}`
+        let state
+        let on
+        
+        if ( hueType === 'groups' ) {
+          state = light.action
+          on = light.state.any_on
+        } else {
+          state = light.state
+          on = light.state.on
+        }
+
+        var values = [
+          {
+            path: `${path}.state`,
+            value: on
+          },
+          {
+            path: `${path}.dimmingLevel`,
+            value: state.bri / 255.0
+          }
+        ]
+
+        const meta = {
+          type: 'dimmer',
+          displayName: displayName,
+          hueModel: light.modelid,
+          canDimWhenOff: false
+        }
+
+        const delta = {
+          updates: [
+            {
+              values: values
             }
+          ]
+        }
 
-            var values = [
-              {
-                path: `${path}.state`,
-                value: on
-              },
-              {
-                path: `${path}.dimmingLevel`,
-                value: state.bri / 255.0
-              },
-              {
-                path: `${path}.meta`,
-                value: {
-                  type: 'dimmer',
-                  displayName: displayName,
-                  hueModel: light.modelid,
-                  canDimWhenOff: false
-                }
-              }
-            ]
-
-            if ( state.colormode ) {
-              values.push({
-                path: `${path}.colorMode`,
-                value: colorModeMap[state.colormode]
-              })
-
-              if ( state.hue && state.sat ) {
-                values.push({
-                  path: `${path}.hue`,
-                  value: state.hue / 182.04 / 360.0
-                })
-                values.push({
-                  path: `${path}.saturation`,
-                  value: state.sat / 255.0
-                })
-              }
-
-              if ( state.ct ) {
-                values.push({
-                  path: `${path}.temperature`,
-                  value: 1000000.0/state.ct
-                })
-              }
-
-              if ( state.xy ) {
-                values.push({
-                  path: `${path}.cie`,
-                  value: { x: state.xy[0], y: state.xy[1] }
-                })
-              }
-            }
-
-            if ( !registeredForPut[hueType][key] && app.registerActionHandler ) {
-              app.registerActionHandler('vessels.self',
-                                        `${path}.state`,
-                                        getActionHandler({
-                                          ip: ip,
-                                          props: props,
-                                          id: key,
-                                          type: 'state',
-                                          hueType: hueType
-                                        }))
-              app.registerActionHandler('vessels.self',
-                                        `${path}.dimmingLevel`,
-                                        getActionHandler({
-                                          ip: ip,
-                                          props: props,
-                                          id: key,
-                                          type: 'dimmingLevel',
-                                          hueType: hueType
-                                        }))
-              
-              registeredForPut[hueType][key] = true
-            }
-            
+        if ( app.supportsMetaDeltas ) {
+          if ( !sentMeta[path] ) {
+            sentMeta[path] = true
             app.handleMessage(plugin.id, {
               updates: [
                 {
-                  values: values
+                  meta: [{
+                    path,
+                    value: meta
+                  }]
                 }
               ]
             })
-          })
+          }
         } else {
-          printRequestError(error, response)
+          values.push({
+            path: `${path}.meta`,
+            value: meta
+          })
         }
+
+        if ( state.colormode ) {
+          values.push({
+            path: `${path}.colorMode`,
+            value: colorModeMap[state.colormode]
+          })
+
+          if ( state.hue && state.sat ) {
+            values.push({
+              path: `${path}.hue`,
+              value: state.hue / 182.04 / 360.0
+            })
+            values.push({
+              path: `${path}.saturation`,
+              value: state.sat / 255.0
+            })
+          }
+
+          if ( state.ct ) {
+            values.push({
+              path: `${path}.temperature`,
+              value: state.ct
+            })
+          }
+
+          if ( state.xy ) {
+            values.push({
+              path: `${path}.cie`,
+              value: { x: state.xy[0], y: state.xy[1] }
+            })
+          }
+        }
+
+        if ( !registeredForPut[hueType][key] && app.registerActionHandler ) {
+          app.registerActionHandler('vessels.self',
+                                    `${path}.state`,
+                                    getActionHandler({
+                                      ip: ip,
+                                      props: props,
+                                      id: key,
+                                      type: 'on',
+                                      hueType: hueType,
+                                      converter: value => {
+                                        return value ? true : false
+                                      }
+                                    }))
+          app.registerActionHandler('vessels.self',
+                                    `${path}.dimmingLevel`,
+                                    getActionHandler({
+                                      ip: ip,
+                                      props: props,
+                                      id: key,
+                                      type: 'bri',
+                                      hueType: hueType,
+                                      converter: value => {
+                                        return Math.round(value*254)
+                                      }
+                                    }))
+
+          if ( state.xy ) {
+            app.registerActionHandler('vessels.self',
+                                      `${path}.cie`,
+                                      getActionHandler({
+                                        ip: ip,
+                                        props: props,
+                                        id: key,
+                                        type: 'xy',
+                                        hueType: hueType,
+                                        converter: value => {
+                                          return [ value.x, value.y ]
+                                        }
+                                      }))
+          }
+
+          if ( state.ct ) {
+            app.registerActionHandler('vessels.self',
+                                      `${path}.temperature`,
+                                      getActionHandler({
+                                        ip: ip,
+                                        props: props,
+                                        id: key,
+                                        type: 'ct',
+                                        hueType: hueType,
+                                        converter: value => {
+                                          return value
+                                        }
+                                      }))
+          }
+
+          if ( state.hue && state.sat ) {
+            app.registerActionHandler('vessels.self',
+                                      `${path}.hue`,
+                                      getActionHandler({
+                                        ip: ip,
+                                        props: props,
+                                        id: key,
+                                        type: 'hue',
+                                        hueType: hueType,
+                                        converter: value => {
+                                          return Math.round(value*182*360.0)
+                                        }
+                                      }))
+            app.registerActionHandler('vessels.self',
+                                      `${path}.saturation`,
+                                      getActionHandler({
+                                        ip: ip,
+                                        props: props,
+                                        id: key,
+                                        type: 'sat',
+                                        hueType: hueType,
+                                        converter: value => {
+                                          return Math.round(value*255.0)
+                                        }
+                                      }))
+          }
+          
+          registeredForPut[hueType][key] = true
+        }
+        
+        app.handleMessage(plugin.id, delta)
       })
+    })
   }
 
 
