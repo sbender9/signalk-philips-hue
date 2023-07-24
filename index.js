@@ -318,7 +318,7 @@ module.exports = function(app) {
 
           if ( state.ct ) {
             values.push({
-              path: `${path}.temperature`,
+              path: `${path}.colorTemperature`,
               value: state.ct
             })
           }
@@ -374,7 +374,7 @@ module.exports = function(app) {
 
           if ( state.ct ) {
             app.registerActionHandler('vessels.self',
-                                      `${path}.temperature`,
+                                      `${path}.colorTemperature`,
                                       getActionHandler({
                                         ip: ip,
                                         props: props,
