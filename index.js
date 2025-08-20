@@ -177,7 +177,7 @@ module.exports = function(app) {
           if ( _.isArray(body) && body.length > 0 && _.isObject(body[0]) && (body[0].error || body[0].success) ) {
             if ( body[0].success ) {
               let result_value = body[0].success[`${requestPath}/${type}`]
-              if ( data.type === 'dimmingLevel' ) {
+              if ( data.type === 'bri' ) {
                 result_value = result_value / 254.0
               }
               
